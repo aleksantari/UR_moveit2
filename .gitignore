@@ -1,0 +1,29 @@
+# Build artifacts (in case you build inside the demos folder accidentally)
+build/
+install/
+log/
+
+# ROS 2 logs or temporary files
+*.log
+*.pyc
+__pycache__/
+*.swp
+*.swo
+
+# Colcon metadata
+.colcon/
+
+# IDE/editor settings
+.vscode/
+.idea/
+*.DS_Store
+
+# CMake/Make artifacts
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Python virtual environments (if used in dev)
+venv/
+.env/

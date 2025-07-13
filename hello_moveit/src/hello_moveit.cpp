@@ -1,7 +1,10 @@
-#include <memory>
-#include <moveit_visual_tools/moveit_visual_tools.h>
-#include <rclcpp/rclcpp.hpp>
 #include <moveit/move_group_interface/move_group_interface.h>
+#include <moveit_visual_tools/moveit_visual_tools.h>
+
+#include <memory>
+#include <rclcpp/rclcpp.hpp>
+#include <thread>
+
 
 int main(int argc, char * argv[])
 {
@@ -19,6 +22,14 @@ int main(int argc, char * argv[])
   // Create a ROS logger
   auto const logger = rclcpp::get_logger("hello_moveit");
 
+  // we spin up a SingleThreadedExecutor for the current state monitor to get information about the robot's current state
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node);
+
+  // we spin up a thread to run the executor
+  auto spinner = std::thread([&executor]() { executor.spin()});
+
+
   // Create the MoveGroupInterface instance
   // This interface allows you to interact with the MoveIt! planning interface.
   // The first argument is the Node, and the second is the name of the planning group.
@@ -32,7 +43,30 @@ int main(int argc, char * argv[])
   // interface, allowing you to set goals, plan paths, and execute motions.
   // sets up state monitoring and kinematics for the ur_manipulator planning group
   using moveit::planning_interface::MoveGroupInterface;
-  auto move_group_node = MoveGroupInterface(node, "ur_manipulator");
+  auto move_group_interface = MoveGroupInterface(node, "ur_manipulator");
+
+  // construct and initialize MoveItVisualTools
+  auto moveit_visual_tools = moveit_visual_tools::MoveItVisualTools{ node, "base_link", rvis_visual_tools::RVIZ_MARKER_TOPIC, move_group_interface.getRobotModel()};
+
+  moveit_visual_tools.deleteAllMarkers();
+  moveit_visual_tools.loadRemoteControl();
+
+  // create a closure for updating the text in rviz
+  auto const draw_title = [&moveit_visual_tools](auto text) {
+    auto const text_pose = {
+      auto msg = Eigen::Isometry3d::Identity(); 
+      msg.translation().z() = 1 // place text 1m above the base link
+      return msg
+  }();
+  moveit_visual_tools.publishText(text_pose, text, rviz_visual_tools::WHITE, rvis_visual_tools::XLARGE);
+  };
+  // 
+  auto const prompt = [&moveit_visual_tools](auto text) { moveit_visual_tools.prompt(text); };
+  // draws trajectory
+  auto const draw_trajectory_tool_path =
+      [&moveit_visual_tools, jmg = move_group_interface.getRobotModel()->getJointModelGroup("manipulator")](
+          auto const trajectory) { moveit_visual_tools.publishTrajectoryLine(trajectory, jmg); };
+
 
   // Set a target Pose
   auto const target_pose = []{
@@ -50,10 +84,12 @@ int main(int argc, char * argv[])
   // this include: the pose, the target frame (usually the end effector frame), and any tolerance settings
   // then stores it in the MoveGroupInterface object
   // goal_constraints field becomes part of the next move_action call
-  move_group_node.setPoseTarget(target_pose);
+  move_group_interface.setPoseTarget(target_pose);
 
-
-
+  // 
+  prompt("press 'next' in the RvisVisualToolsGui window to plan");
+  draw_title("planning");
+  moveit_visual_tools.trigger()
 
   // Create a plan to that target pose
   auto const [success, plan] = [&move_group_node]{
@@ -69,7 +105,7 @@ int main(int argc, char * argv[])
     // the move_group_node loads the planning pipeline, performs IK, checks for collisions, gernerates a trajectory,
     // and returns the plan in the msg object
     // if the planning is successful, the msg object will contain a valid trajectory
-    auto const ok = static_cast<bool>(move_group_node.plan(msg));
+    auto const ok = static_cast<bool>(move_group_interface.plan(msg));
     return std::make_pair(ok, msg);
   }();
 
@@ -79,12 +115,23 @@ int main(int argc, char * argv[])
     // internally calls the ur_manipulator/execute_action server to execute the trajectory
     // it forwards to trajectory to trajectory_execution_manager which publushes it to the /joint_trajectory_action topic
     // the joint__trajectory_controller interports the trajectory and sends it to the robot
-    move_group_node.execute(plan);
-  } else {
+    draw_trajectory_tool_path(plan.trajectory)
+    moveit_visual_tools.trigger();
+    prompt("Press 'next' in the RvizVisualToolsGui window to execute");
+    draw_title("Executing");
+    moveit_visual_tools.trigger();
+    move_group_interface.execute(plan);
+  }
+   else 
+  {
+
+    draw_title("Planning Failed!");
+    moveit_visual_tools.trigger();
     RCLCPP_ERROR(logger, "Planing failed!");
   }
 
   // Shutdown ROS
   rclcpp::shutdown();
+  spinner.join();
   return 0;
 }
