@@ -58,6 +58,9 @@ int main(int argc, char* argv[])
   using moveit::planning_interface::MoveGroupInterface;
   auto move_group_interface = MoveGroupInterface(node, "ur_manipulator");
 
+  // Set the end-effector link once - cleaner than repeating in each setPoseTarget call
+  move_group_interface.setEndEffectorLink("tool0");
+
   RCLCPP_INFO(logger, "Step 3: Creating MoveIt Visual Tools...");
 
   // Create the MoveIt Visual Tools
@@ -194,7 +197,7 @@ int main(int argc, char* argv[])
 
   RCLCPP_INFO(logger, "Step 14: Setting pose target for tool0...");
   // Set the target for tool0 (not TCP) - this is what MoveIt solves IK for
-  move_group_interface.setPoseTarget(target_tool0_pose, "tool0");
+  move_group_interface.setPoseTarget(target_tool0_pose);
 
   RCLCPP_INFO(logger, "Step 15: Starting motion planning...");
   // Plan the motion
@@ -283,7 +286,7 @@ int main(int argc, char* argv[])
     prompt("Press 'next' to execute the motion");
     
     // ============================================
-    // STEP 4: Execute motion
+    // STEP 4: Execute motion using plan()+execute() - better for trajectory visualization demos
     // ============================================
     
     RCLCPP_INFO(logger, "Step 24: Updating title for execution...");
@@ -291,6 +294,7 @@ int main(int argc, char* argv[])
     moveit_visual_tools.trigger();
     
     RCLCPP_INFO(logger, "Step 25: Executing planned motion...");
+    // Use execute(plan) since we already planned for visualization - more appropriate than move()
     auto const execute_success = move_group_interface.execute(plan);
     
     RCLCPP_INFO(logger, "Step 26: Execution completed with result: %s", 
