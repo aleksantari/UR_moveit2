@@ -1,6 +1,7 @@
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit_visual_tools/moveit_visual_tools.h>
 
+
 #include <memory>
 #include <rclcpp/rclcpp.hpp>
 #include <thread>
@@ -27,7 +28,7 @@ int main(int argc, char * argv[])
   executor.add_node(node);
 
   // we spin up a thread to run the executor
-  auto spinner = std::thread([&executor]() { executor.spin()});
+  auto spinner = std::thread([&executor]() { executor.spin(); });
 
 
   // Create the MoveGroupInterface instance
@@ -46,7 +47,9 @@ int main(int argc, char * argv[])
   auto move_group_interface = MoveGroupInterface(node, "ur_manipulator");
 
   // construct and initialize MoveItVisualTools
-  auto moveit_visual_tools = moveit_visual_tools::MoveItVisualTools{ node, "base_link", rvis_visual_tools::RVIZ_MARKER_TOPIC, move_group_interface.getRobotModel()};
+  auto moveit_visual_tools =
+      moveit_visual_tools::MoveItVisualTools{ node, "base_link", rviz_visual_tools::RVIZ_MARKER_TOPIC,
+                                              move_group_interface.getRobotModel() };
   //delete all markers from previous run
   moveit_visual_tools.deleteAllMarkers();
   // load remote controller thatn lets us have a button in rvis to interact with our program
@@ -59,19 +62,34 @@ int main(int argc, char * argv[])
 
   //add text one meter above the base of robot
   auto const draw_title = [&moveit_visual_tools](auto text) {
-    auto const text_pose = {
-      auto msg = Eigen::Isometry3d::Identity(); 
-      msg.translation().z() = 1; // place text 1m above the base link
+    auto const text_pose = [] {
+      auto msg = Eigen::Isometry3d::Identity();
+      msg.translation().z() = 1.0;  // Place text 1m above the base link
       return msg;
-  }();
-  moveit_visual_tools.publishText(text_pose, text, rviz_visual_tools::WHITE, rvis_visual_tools::XLARGE);
+    }();
+    moveit_visual_tools.publishText(text_pose, text, rviz_visual_tools::WHITE, rviz_visual_tools::XLARGE);
   };
   // 'prompt' blocks the progran until user pressed the next button
   auto const prompt = [&moveit_visual_tools](auto text) { moveit_visual_tools.prompt(text); };
   // draws trajectory that we have planned
   auto const draw_trajectory_tool_path =
-      [&moveit_visual_tools, jmg = move_group_interface.getRobotModel()->getJointModelGroup("manipulator")](
-          auto const trajectory) { moveit_visual_tools.publishTrajectoryLine(trajectory, jmg); };
+      [&moveit_visual_tools, &move_group_interface](auto const trajectory) { 
+        // Get the tool0 link model directly from the robot model, since there is np true endeffector
+        const moveit::core::LinkModel* tool0_link = 
+          move_group_interface.getRobotModel()->getLinkModel("tool0");
+        
+        if (!tool0_link) {
+          RCLCPP_ERROR(rclcpp::get_logger("hello_moveit"), "Link 'tool0' not found!");
+          return;
+        }
+        
+        RCLCPP_INFO(rclcpp::get_logger("hello_moveit"), "Drawing trajectory for tool0 link");
+        
+        // now publish the line of the trajectory
+        moveit_visual_tools.publishTrajectoryLine(trajectory, tool0_link, 
+          move_group_interface.getRobotModel()->getJointModelGroup("ur_manipulator"), 
+          rviz_visual_tools::RED);
+      };
 
 
   // Set a target Pose
@@ -99,7 +117,7 @@ int main(int argc, char * argv[])
   moveit_visual_tools.trigger();
 
   // Create a plan to that target pose
-  auto const [success, plan] = [&move_group_node]{
+  auto const [success, plan] = [&move_group_interface]{
 
     // i think this is a MoveGroupInterface::Plan object which contains the trajectory to be executed
     // is included the vurrent state of the robot, the planned trajectory, and any other relevant information
@@ -122,7 +140,7 @@ int main(int argc, char * argv[])
     // internally calls the ur_manipulator/execute_action server to execute the trajectory
     // it forwards to trajectory to trajectory_execution_manager which publushes it to the /joint_trajectory_action topic
     // the joint__trajectory_controller interports the trajectory and sends it to the robot
-    draw_trajectory_tool_path(plan.trajectory);
+    draw_trajectory_tool_path(plan.trajectory_);
     moveit_visual_tools.trigger();
     prompt("Press 'next' in the RvizVisualToolsGui window to execute");
     draw_title("Executing");
