@@ -159,24 +159,39 @@ int main(int argc, char* argv[])
   
   RCLCPP_INFO(logger, "Step 9: Getting focus point distance from user...");
   
-  // Get distance input from user
-  double focus_distance = 0.0;
-  std::cout << "\nPlease enter the distance from TCP to focus point (in meters, e.g., 0.08 for 8cm): ";
-  std::cin >> focus_distance;
+  // Get distance input from user with improved prompting
+  double focus_offset = 0.0;
+  prompt("Position the robot manually so the TCP is directly above and facing the desired focus point, then press 'next'");
+  std::cout << "\nEnter focus-point offset along TCP's -Z axis (meters, e.g., 0.08 = 8cm): ";
+  std::cin >> focus_offset;
   
   // Validate input
-  if (focus_distance <= 0.0 || focus_distance > 1.0) {
-    RCLCPP_WARN(logger, "Invalid distance input: %.3f. Using default of 0.08m", focus_distance);
-    focus_distance = 0.08;
+  if (focus_offset <= 0.0 || focus_offset > 1.0) {
+    RCLCPP_WARN(logger, "Invalid distance input: %.3f. Using default of 0.08m", focus_offset);
+    focus_offset = 0.08;
   }
   
-  RCLCPP_INFO(logger, "Focus point distance: %.3f meters", focus_distance);
+  RCLCPP_INFO(logger, "Focus point offset: %.3f meters", focus_offset);
   
-  // Calculate focus point: distance below current TCP in Z direction
-  geometry_msgs::msg::Pose focus_point = initial_tcp_pose;
-  focus_point.position.z -= focus_distance;  // Move down in Z direction
+  // ============================================
+  // PROPER COORDINATE FRAME TRANSFORMATION
+  // ============================================
   
-  RCLCPP_INFO(logger, "Step 10: Focus point calculated at: [%.3f, %.3f, %.3f]",
+  // Convert TCP pose to Eigen transform for proper coordinate math
+  Eigen::Isometry3d T_world_tcp;
+  tf2::fromMsg(initial_tcp_pose, T_world_tcp);
+  
+  // Calculate focus point: translate +Z in the TCP frame (positive blue axis direction)
+  // This correctly handles TCP orientation regardless of robot pose
+  Eigen::Isometry3d T_world_focus = T_world_tcp * 
+                                    Eigen::Translation3d(0, 0, focus_offset);  // Fixed: +focus_offset instead of -focus_offset
+  
+  // Convert back to ROS message format
+  geometry_msgs::msg::Pose focus_point = tf2::toMsg(T_world_focus);
+  
+  RCLCPP_INFO(logger, "Step 10: Focus point calculated using proper coordinate transforms:");
+  RCLCPP_INFO(logger, "  TCP frame: Translate [0, 0, %.3f] (along TCP's +Z axis - blue axis)", focus_offset);
+  RCLCPP_INFO(logger, "  World coordinates: [%.3f, %.3f, %.3f]",
               focus_point.position.x,
               focus_point.position.y,
               focus_point.position.z);
@@ -187,12 +202,12 @@ int main(int argc, char* argv[])
   
   RCLCPP_INFO(logger, "Step 11: Visualizing focus point...");
   
-  // Visualize the focus point with a distinctive marker
-  moveit_visual_tools.publishSphere(focus_point, rviz_visual_tools::RED, 0.02, "focus_point");
-  moveit_visual_tools.publishAxis(focus_point, 0.08, 0.015, "focus_point_axes");
-  moveit_visual_tools.publishText(focus_point, "FOCUS POINT", rviz_visual_tools::RED, rviz_visual_tools::LARGE);
+  // Visualize the focus point using purple color as recommended
+  moveit_visual_tools.publishSphere(focus_point, rviz_visual_tools::PURPLE, 0.02, "focus_point");
+  moveit_visual_tools.publishAxis(focus_point, 0.06, 0.01, "focus_point_axes");
+  moveit_visual_tools.publishText(focus_point, "FOCUS POINT", rviz_visual_tools::PURPLE, rviz_visual_tools::LARGE);
   
-  // Draw a line connecting TCP to focus point for visualization
+  // Enhanced visualization: Draw a line connecting TCP to focus point
   std::vector<geometry_msgs::msg::Point> focus_line;
   geometry_msgs::msg::Point tcp_point, focus_pt;
   tcp_point.x = initial_tcp_pose.position.x;
@@ -209,6 +224,9 @@ int main(int argc, char* argv[])
   moveit_visual_tools.trigger();
   
   RCLCPP_INFO(logger, "Step 12: Focus point visualization complete!");
+  RCLCPP_INFO(logger, "  - Purple sphere and axes: Focus point location");
+  RCLCPP_INFO(logger, "  - Yellow line: TCP to focus point connection");
+  RCLCPP_INFO(logger, "  - Blue sphere: Initial TCP position");
   draw_title("Focus Point Defined - Ready for Motion");
   moveit_visual_tools.trigger();
   
