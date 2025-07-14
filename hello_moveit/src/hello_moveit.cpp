@@ -10,15 +10,9 @@
 #include <chrono>   // Added for sleep
 
 /** Compute tool0 pose for a desired TCP pose using standard MoveIt 2 pattern */
-geometry_msgs::msg::Pose tool0PoseFromTcpPose(const geometry_msgs::msg::Pose& tcp_in_world)
+geometry_msgs::msg::Pose tool0PoseFromTcpPose(const geometry_msgs::msg::Pose& tcp_in_world,
+                                               const Eigen::Isometry3d& T_tool0_tcp)
 {
-  // Constant rigid transform from tool0 to your TCP (= "camera_tip")
-  // 5 cm offset in x, y, z directions (units in meters)
-  // Fixed: Proper Eigen Isometry3d construction
-  static const Eigen::Isometry3d T_tool0_tcp = 
-        Eigen::Isometry3d(Eigen::Translation3d(0.05, 0.05, 0.05)) *
-        Eigen::Isometry3d(Eigen::AngleAxisd(0, Eigen::Vector3d::UnitX()));
-
   Eigen::Isometry3d T_world_tcp;
   tf2::fromMsg(tcp_in_world, T_world_tcp);
 
@@ -28,12 +22,9 @@ geometry_msgs::msg::Pose tool0PoseFromTcpPose(const geometry_msgs::msg::Pose& tc
 }
 
 /** Get the current TCP pose in world frame */
-geometry_msgs::msg::Pose getCurrentTcpPose(const moveit::planning_interface::MoveGroupInterface& move_group)
+geometry_msgs::msg::Pose getCurrentTcpPose(const moveit::planning_interface::MoveGroupInterface& move_group,
+                                            const Eigen::Isometry3d& T_tool0_tcp)
 {
-  // TCP offset transform (same as above) - Fixed: Proper Eigen conversion
-  static const Eigen::Isometry3d T_tool0_tcp = 
-        Eigen::Isometry3d(Eigen::Translation3d(0.05, 0.05, 0.05));
-
   // Get current tool0 pose
   auto current_state = move_group.getCurrentState();
   const Eigen::Isometry3d& T_world_tool0 = current_state->getGlobalLinkTransform("tool0");
@@ -123,10 +114,13 @@ int main(int argc, char* argv[])
   
   RCLCPP_INFO(logger, "Step 5: Configuring TCP offset...");
   
-  // TCP offset: 5cm in each direction from tool0 (units in meters)
-  // Fixed: Proper Eigen conversion for Humble
+  // TCP offset: Configurable via ROS parameters (units in meters)
+  double tcp_offset_x = node->get_parameter_or("tcp_offset.x", 0.05);
+  double tcp_offset_y = node->get_parameter_or("tcp_offset.y", 0.05);
+  double tcp_offset_z = node->get_parameter_or("tcp_offset.z", 0.05);
+  
   const Eigen::Isometry3d T_tool0_tcp = 
-        Eigen::Isometry3d(Eigen::Translation3d(0.05, 0.05, 0.05));
+        Eigen::Isometry3d(Eigen::Translation3d(tcp_offset_x, tcp_offset_y, tcp_offset_z));
   
   RCLCPP_INFO(logger, "TCP offset from tool0: [%.3f, %.3f, %.3f] meters",
               T_tool0_tcp.translation().x(), 
@@ -154,7 +148,7 @@ int main(int argc, char* argv[])
   // ============================================
   
   RCLCPP_INFO(logger, "Step 9: Getting current TCP pose...");
-  auto current_tcp_pose = getCurrentTcpPose(move_group_interface);
+  auto current_tcp_pose = getCurrentTcpPose(move_group_interface, T_tool0_tcp);
   
   RCLCPP_INFO(logger, "Current TCP position: [%.3f, %.3f, %.3f]",
               current_tcp_pose.position.x,
@@ -191,7 +185,7 @@ int main(int argc, char* argv[])
 
   RCLCPP_INFO(logger, "Step 13: Converting TCP target to tool0 target...");
   // Convert TCP target to tool0 target using standard MoveIt 2 pattern
-  auto target_tool0_pose = tool0PoseFromTcpPose(target_tcp_pose);
+  auto target_tool0_pose = tool0PoseFromTcpPose(target_tcp_pose, T_tool0_tcp);
 
   RCLCPP_INFO(logger, "Tool0 target position: [%.3f, %.3f, %.3f]",
               target_tool0_pose.position.x,
@@ -308,7 +302,7 @@ int main(int argc, char* argv[])
       
       RCLCPP_INFO(logger, "Step 27: Getting final TCP pose...");
       // Visualize final TCP position
-      auto final_tcp_pose = getCurrentTcpPose(move_group_interface);
+      auto final_tcp_pose = getCurrentTcpPose(move_group_interface, T_tool0_tcp);
       
       RCLCPP_INFO(logger, "Final TCP position: [%.3f, %.3f, %.3f]",
                   final_tcp_pose.position.x,
