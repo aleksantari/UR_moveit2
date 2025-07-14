@@ -131,18 +131,99 @@ int main(int argc, char* argv[])
               T_tool0_tcp.translation().z());
 
   // ============================================
-  // DEMONSTRATION - Standard MoveIt 2 TCP Pattern
+  // FOCUS POINT DEFINITION SYSTEM
   // ============================================
   
-  RCLCPP_INFO(logger, "Step 6: Starting demo visualization...");
+  RCLCPP_INFO(logger, "Step 7: Defining focus point...");
+  
+  // Assume user has manually positioned robot with TCP above and facing the focus point
+  draw_title("Focus Point Definition");
+  moveit_visual_tools.trigger();
+  
+  RCLCPP_INFO(logger, "Step 8: Getting current TCP position for focus point calculation...");
+  prompt("Position the robot manually so the TCP is directly above and facing the desired focus point, then press 'next'");
+  
+  // Capture the initial TCP position (this is where user positioned it)
+  auto initial_tcp_pose = getCurrentTcpPose(move_group_interface, T_tool0_tcp);
+  
+  RCLCPP_INFO(logger, "Initial TCP position captured: [%.3f, %.3f, %.3f]",
+              initial_tcp_pose.position.x,
+              initial_tcp_pose.position.y,
+              initial_tcp_pose.position.z);
+  
+  // Visualize the initial TCP position
+  moveit_visual_tools.publishSphere(initial_tcp_pose, rviz_visual_tools::BLUE, 0.015, "initial_tcp");
+  moveit_visual_tools.publishAxis(initial_tcp_pose, 0.05, 0.01, "initial_tcp_axes");
+  moveit_visual_tools.publishText(initial_tcp_pose, "Initial TCP", rviz_visual_tools::BLUE, rviz_visual_tools::MEDIUM);
+  moveit_visual_tools.trigger();
+  
+  RCLCPP_INFO(logger, "Step 9: Getting focus point distance from user...");
+  
+  // Get distance input from user
+  double focus_distance = 0.0;
+  std::cout << "\nPlease enter the distance from TCP to focus point (in meters, e.g., 0.08 for 8cm): ";
+  std::cin >> focus_distance;
+  
+  // Validate input
+  if (focus_distance <= 0.0 || focus_distance > 1.0) {
+    RCLCPP_WARN(logger, "Invalid distance input: %.3f. Using default of 0.08m", focus_distance);
+    focus_distance = 0.08;
+  }
+  
+  RCLCPP_INFO(logger, "Focus point distance: %.3f meters", focus_distance);
+  
+  // Calculate focus point: distance below current TCP in Z direction
+  geometry_msgs::msg::Pose focus_point = initial_tcp_pose;
+  focus_point.position.z -= focus_distance;  // Move down in Z direction
+  
+  RCLCPP_INFO(logger, "Step 10: Focus point calculated at: [%.3f, %.3f, %.3f]",
+              focus_point.position.x,
+              focus_point.position.y,
+              focus_point.position.z);
+  
+  // ============================================
+  // FOCUS POINT VISUALIZATION
+  // ============================================
+  
+  RCLCPP_INFO(logger, "Step 11: Visualizing focus point...");
+  
+  // Visualize the focus point with a distinctive marker
+  moveit_visual_tools.publishSphere(focus_point, rviz_visual_tools::RED, 0.02, "focus_point");
+  moveit_visual_tools.publishAxis(focus_point, 0.08, 0.015, "focus_point_axes");
+  moveit_visual_tools.publishText(focus_point, "FOCUS POINT", rviz_visual_tools::RED, rviz_visual_tools::LARGE);
+  
+  // Draw a line connecting TCP to focus point for visualization
+  std::vector<geometry_msgs::msg::Point> focus_line;
+  geometry_msgs::msg::Point tcp_point, focus_pt;
+  tcp_point.x = initial_tcp_pose.position.x;
+  tcp_point.y = initial_tcp_pose.position.y;
+  tcp_point.z = initial_tcp_pose.position.z;
+  focus_pt.x = focus_point.position.x;
+  focus_pt.y = focus_point.position.y;
+  focus_pt.z = focus_point.position.z;
+  focus_line.push_back(tcp_point);
+  focus_line.push_back(focus_pt);
+  
+  moveit_visual_tools.publishPath(focus_line, rviz_visual_tools::YELLOW, 0.005, "tcp_to_focus");
+  
+  moveit_visual_tools.trigger();
+  
+  RCLCPP_INFO(logger, "Step 12: Focus point visualization complete!");
+  draw_title("Focus Point Defined - Ready for Motion");
+  moveit_visual_tools.trigger();
+  
+  prompt("Focus point has been defined and visualized. Press 'next' to continue with existing trajectory");
+
+  // ============================================
+  // DEMONSTRATION - Standard MoveIt 2 TCP Pattern (CONTINUES AS BEFORE)
+  // ============================================
+  
+  RCLCPP_INFO(logger, "Step 13: Starting demo visualization...");
   
   draw_title("MoveIt 2 TCP Offset Demo");
   moveit_visual_tools.trigger();
   
-  RCLCPP_INFO(logger, "Step 7: First prompt - Press 'next' to start...");
-  prompt("Press 'next' to start the TCP offset demo");
-
-  RCLCPP_INFO(logger, "Step 8: Setting start state...");
+  RCLCPP_INFO(logger, "Step 14: Setting start state...");
   // Set starting pose to current state
   move_group_interface.setStartStateToCurrentState();
 
@@ -150,7 +231,7 @@ int main(int argc, char* argv[])
   // STEP 1: Visualize current TCP position
   // ============================================
   
-  RCLCPP_INFO(logger, "Step 9: Getting current TCP pose...");
+  RCLCPP_INFO(logger, "Step 15: Getting current TCP pose...");
   auto current_tcp_pose = getCurrentTcpPose(move_group_interface, T_tool0_tcp);
   
   RCLCPP_INFO(logger, "Current TCP position: [%.3f, %.3f, %.3f]",
@@ -158,21 +239,21 @@ int main(int argc, char* argv[])
               current_tcp_pose.position.y,
               current_tcp_pose.position.z);
   
-  RCLCPP_INFO(logger, "Step 10: Visualizing current TCP...");
+  RCLCPP_INFO(logger, "Step 16: Visualizing current TCP...");
   // Visualize current TCP
   moveit_visual_tools.publishSphere(current_tcp_pose, rviz_visual_tools::BLUE, 0.015, "current_tcp");
   moveit_visual_tools.publishAxis(current_tcp_pose, 0.05, 0.01, "current_tcp_axes");
   moveit_visual_tools.publishText(current_tcp_pose, "Current TCP", rviz_visual_tools::BLUE, rviz_visual_tools::MEDIUM);
   moveit_visual_tools.trigger();
   
-  RCLCPP_INFO(logger, "Step 11: Second prompt - Press 'next' to plan...");
+  RCLCPP_INFO(logger, "Step 17: Second prompt - Press 'next' to plan...");
   prompt("Press 'next' to plan motion to target TCP pose");
 
   // ============================================
   // STEP 2: Define target TCP pose and plan
   // ============================================
   
-  RCLCPP_INFO(logger, "Step 12: Defining target TCP pose...");
+  RCLCPP_INFO(logger, "Step 18: Defining target TCP pose...");
   
   // Define a target pose for the TCP (camera tip)
   geometry_msgs::msg::Pose target_tcp_pose;
@@ -186,7 +267,7 @@ int main(int argc, char* argv[])
               target_tcp_pose.position.y,
               target_tcp_pose.position.z);
 
-  RCLCPP_INFO(logger, "Step 13: Converting TCP target to tool0 target...");
+  RCLCPP_INFO(logger, "Step 19: Converting TCP target to tool0 target...");
   // Convert TCP target to tool0 target using standard MoveIt 2 pattern
   auto target_tool0_pose = tool0PoseFromTcpPose(target_tcp_pose, T_tool0_tcp);
 
@@ -195,16 +276,16 @@ int main(int argc, char* argv[])
               target_tool0_pose.position.y,
               target_tool0_pose.position.z);
 
-  RCLCPP_INFO(logger, "Step 14: Setting pose target for tool0...");
+  RCLCPP_INFO(logger, "Step 20: Setting pose target for tool0...");
   // Set the target for tool0 (not TCP) - this is what MoveIt solves IK for
   move_group_interface.setPoseTarget(target_tool0_pose);
 
-  RCLCPP_INFO(logger, "Step 15: Starting motion planning...");
+  RCLCPP_INFO(logger, "Step 21: Starting motion planning...");
   // Plan the motion
   moveit::planning_interface::MoveGroupInterface::Plan plan;
   auto const planning_success = move_group_interface.plan(plan);
 
-  RCLCPP_INFO(logger, "Step 16: Planning completed with result: %s", 
+  RCLCPP_INFO(logger, "Step 22: Planning completed with result: %s", 
               (planning_success == moveit::core::MoveItErrorCode::SUCCESS) ? "SUCCESS" : "FAILED");
 
   // Fixed: Use correct MoveItErrorCode namespace for Humble
@@ -215,7 +296,7 @@ int main(int argc, char* argv[])
     // STEP 3: Visualize target and trajectory
     // ============================================
     
-    RCLCPP_INFO(logger, "Step 17: Visualizing target TCP pose...");
+    RCLCPP_INFO(logger, "Step 23: Visualizing target TCP pose...");
     
     // Visualize target TCP pose
     moveit_visual_tools.publishAxis(target_tcp_pose, rviz_visual_tools::LARGE);
@@ -226,7 +307,7 @@ int main(int argc, char* argv[])
     // KEY FEATURE: Visualize TCP trajectory manually for Humble compatibility
     // ============================================
     
-    RCLCPP_INFO(logger, "Step 18: Drawing tool0 trajectory...");
+    RCLCPP_INFO(logger, "Step 24: Drawing tool0 trajectory...");
     
     // First, draw the standard tool0 trajectory
     moveit_visual_tools.publishTrajectoryLine(
@@ -234,7 +315,7 @@ int main(int argc, char* argv[])
         move_group_interface.getRobotModel()->getJointModelGroup("ur_manipulator"),
         rviz_visual_tools::YELLOW);  // Yellow for tool0 path
     
-    RCLCPP_INFO(logger, "Step 19: Processing trajectory for TCP visualization...");
+    RCLCPP_INFO(logger, "Step 25: Processing trajectory for TCP visualization...");
     
     // Now manually draw the TCP trajectory using trajectory points
     // Convert trajectory to RobotTrajectory for processing
@@ -243,7 +324,7 @@ int main(int argc, char* argv[])
     
     RCLCPP_INFO(logger, "Trajectory has %zu waypoints", robot_traj.getWayPointCount());
     
-    RCLCPP_INFO(logger, "Step 20: Drawing TCP trajectory points...");
+    RCLCPP_INFO(logger, "Step 26: Drawing TCP trajectory points...");
     
     // Draw TCP points along the trajectory
     for (size_t i = 0; i < robot_traj.getWayPointCount(); i += 3) {  // Every 3rd point to reduce clutter
@@ -260,7 +341,7 @@ int main(int argc, char* argv[])
       moveit_visual_tools.publishSphere(tcp_pose_msg, rviz_visual_tools::CYAN, rviz_visual_tools::SMALL, "tcp_trajectory");
     }
     
-    RCLCPP_INFO(logger, "Step 21: Drawing TCP trajectory line...");
+    RCLCPP_INFO(logger, "Step 27: Drawing TCP trajectory line...");
     
     // Draw line connecting TCP points for better visualization
     std::vector<geometry_msgs::msg::Point> tcp_points;
@@ -279,32 +360,32 @@ int main(int argc, char* argv[])
     // Publish TCP trajectory line
     moveit_visual_tools.publishPath(tcp_points, rviz_visual_tools::CYAN, 0.004, "tcp_path");
     
-    RCLCPP_INFO(logger, "Step 22: Triggering visualization update...");
+    RCLCPP_INFO(logger, "Step 28: Triggering visualization update...");
     moveit_visual_tools.trigger();
     
-    RCLCPP_INFO(logger, "Step 23: Third prompt - Press 'next' to execute...");
+    RCLCPP_INFO(logger, "Step 29: Third prompt - Press 'next' to execute...");
     prompt("Press 'next' to execute the motion");
     
     // ============================================
     // STEP 4: Execute motion using plan()+execute() - better for trajectory visualization demos
     // ============================================
     
-    RCLCPP_INFO(logger, "Step 24: Updating title for execution...");
+    RCLCPP_INFO(logger, "Step 30: Updating title for execution...");
     draw_title("Executing Motion");
     moveit_visual_tools.trigger();
     
-    RCLCPP_INFO(logger, "Step 25: Executing planned motion...");
+    RCLCPP_INFO(logger, "Step 31: Executing planned motion...");
     // Use execute(plan) since we already planned for visualization - more appropriate than move()
     auto const execute_success = move_group_interface.execute(plan);
     
-    RCLCPP_INFO(logger, "Step 26: Execution completed with result: %s", 
+    RCLCPP_INFO(logger, "Step 32: Execution completed with result: %s", 
                 (execute_success == moveit::core::MoveItErrorCode::SUCCESS) ? "SUCCESS" : "FAILED");
     
     // Fixed: Use correct MoveItErrorCode namespace for Humble
     if (execute_success == moveit::core::MoveItErrorCode::SUCCESS) {
       RCLCPP_INFO(logger, "Motion executed successfully!");
       
-      RCLCPP_INFO(logger, "Step 27: Getting final TCP pose...");
+      RCLCPP_INFO(logger, "Step 33: Getting final TCP pose...");
       // Visualize final TCP position
       auto final_tcp_pose = getCurrentTcpPose(move_group_interface, T_tool0_tcp);
       
@@ -313,7 +394,7 @@ int main(int argc, char* argv[])
                   final_tcp_pose.position.y,
                   final_tcp_pose.position.z);
       
-      RCLCPP_INFO(logger, "Step 28: Visualizing final TCP position...");
+      RCLCPP_INFO(logger, "Step 34: Visualizing final TCP position...");
       moveit_visual_tools.publishSphere(final_tcp_pose, rviz_visual_tools::ORANGE, 0.02, "final_tcp");
       moveit_visual_tools.publishText(final_tcp_pose, "Final TCP", rviz_visual_tools::ORANGE, rviz_visual_tools::MEDIUM);
       moveit_visual_tools.trigger();
@@ -321,7 +402,7 @@ int main(int argc, char* argv[])
       draw_title("Motion Complete - TCP at Target");
       moveit_visual_tools.trigger();
       
-      RCLCPP_INFO(logger, "Step 29: Calculating positioning accuracy...");
+      RCLCPP_INFO(logger, "Step 35: Calculating positioning accuracy...");
       // Calculate and display accuracy
       Eigen::Isometry3d target_transform, final_transform;
       tf2::fromMsg(target_tcp_pose, target_transform);
@@ -337,10 +418,10 @@ int main(int argc, char* argv[])
     RCLCPP_ERROR(logger, "Planning failed!");
   }
 
-  RCLCPP_INFO(logger, "Step 30: Final prompt - Press 'next' to finish...");
+  RCLCPP_INFO(logger, "Step 36: Final prompt - Press 'next' to finish...");
   prompt("Press 'next' to finish demo");
   
-  RCLCPP_INFO(logger, "Step 31: Demo complete!");
+  RCLCPP_INFO(logger, "Step 37: Demo complete!");
   draw_title("TCP Demo Complete");
   moveit_visual_tools.trigger();
 
