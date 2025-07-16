@@ -1,7 +1,7 @@
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit_visual_tools/moveit_visual_tools.h>
-#include <moveit/robot_trajectory/robot_trajectory.h>
-#include <tf2_eigen/tf2_eigen.hpp>  // Fixed: Use .hpp instead of .h for Humble
+#include <moveit/robot_trajectory/robot_trajectory.h> //used for low-level tracjevtory structures
+#include <tf2_eigen/tf2_eigen.hpp>  
 
 #include <memory>
 #include <rclcpp/rclcpp.hpp>
@@ -9,7 +9,7 @@
 #include <iostream> // Added for terminal input
 #include <chrono>   // Added for sleep
 
-/** Compute tool0 pose for a desired TCP pose using standard MoveIt 2 pattern */
+// Compute tool0 pose for a desired TCP pose since this is what Moveit2 uses to plan
 geometry_msgs::msg::Pose tool0PoseFromTcpPose(const geometry_msgs::msg::Pose& tcp_in_world,
                                                const Eigen::Isometry3d& T_tool0_tcp)
 {
@@ -25,7 +25,7 @@ geometry_msgs::msg::Pose tool0PoseFromTcpPose(const geometry_msgs::msg::Pose& tc
 geometry_msgs::msg::Pose getCurrentTcpPose(const moveit::planning_interface::MoveGroupInterface& move_group,
                                             const Eigen::Isometry3d& T_tool0_tcp)
 {
-  // Get current tool0 pose
+  // Get current tool0 pose in world frame
   auto current_state = move_group.getCurrentState();
   const Eigen::Isometry3d& T_world_tool0 = current_state->getGlobalLinkTransform("tool0");
   
@@ -47,7 +47,7 @@ int main(int argc, char* argv[])
   RCLCPP_INFO(logger, "=== Starting MoveIt TCP Demo ===");
   RCLCPP_INFO(logger, "Step 1: Creating ROS executor thread...");
 
-  // CRITICAL: We spin up a SingleThreadedExecutor so MoveItVisualTools can interact with ROS
+  // spin up a SingleThreadedExecutor so MoveItVisualTools can interact with ROS
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node);
   auto spinner = std::thread([&executor]() { executor.spin(); });
@@ -58,7 +58,7 @@ int main(int argc, char* argv[])
   using moveit::planning_interface::MoveGroupInterface;
   auto move_group_interface = MoveGroupInterface(node, "ur_manipulator");
 
-  // Set the end-effector link once - cleaner than repeating in each setPoseTarget call
+  // Set the end-effector link once since its not the true end effector in the udrf
   move_group_interface.setEndEffectorLink("tool0");
 
   RCLCPP_INFO(logger, "Step 3: Creating MoveIt Visual Tools...");
@@ -122,6 +122,7 @@ int main(int argc, char* argv[])
   double tcp_offset_y = node->get_parameter_or("tcp_offset.y", 0.05);
   double tcp_offset_z = node->get_parameter_or("tcp_offset.z", 0.05);
   
+  // from 3 independent points -> 3d vector -> homogeneous matrix
   const Eigen::Isometry3d T_tool0_tcp = 
         Eigen::Isometry3d(Eigen::Translation3d(tcp_offset_x, tcp_offset_y, tcp_offset_z));
   
@@ -161,7 +162,7 @@ int main(int argc, char* argv[])
   
   // Get distance input from user with improved prompting
   double focus_offset = 0.0;
-  prompt("Position the robot manually so the TCP is directly above and facing the desired focus point, then press 'next'");
+  prompt("Record the distance to the focal-point and when you are ready to input press 'next'");
   std::cout << "\nEnter focus-point offset along TCP's -Z axis (meters, e.g., 0.08 = 8cm): ";
   std::cin >> focus_offset;
   
@@ -184,9 +185,9 @@ int main(int argc, char* argv[])
   // Calculate focus point: translate +Z in the TCP frame (positive blue axis direction)
   // This correctly handles TCP orientation regardless of robot pose
   Eigen::Isometry3d T_world_focus = T_world_tcp * 
-                                    Eigen::Translation3d(0, 0, focus_offset);  // Fixed: +focus_offset instead of -focus_offset
+                                    Eigen::Translation3d(0, 0, focus_offset); 
   
-  // Convert back to ROS message format
+  // Convert back to ROS message format for display
   geometry_msgs::msg::Pose focus_point = tf2::toMsg(T_world_focus);
   
   RCLCPP_INFO(logger, "Step 10: Focus point calculated using proper coordinate transforms:");
@@ -202,7 +203,7 @@ int main(int argc, char* argv[])
   
   RCLCPP_INFO(logger, "Step 11: Visualizing focus point...");
   
-  // Visualize the focus point using purple color as recommended
+  // Visualize the focus point
   moveit_visual_tools.publishSphere(focus_point, rviz_visual_tools::PURPLE, 0.02, "focus_point");
   moveit_visual_tools.publishAxis(focus_point, 0.06, 0.01, "focus_point_axes");
   moveit_visual_tools.publishText(focus_point, "FOCUS POINT", rviz_visual_tools::PURPLE, rviz_visual_tools::LARGE);
@@ -233,7 +234,7 @@ int main(int argc, char* argv[])
   prompt("Focus point has been defined and visualized. Press 'next' to continue with existing trajectory");
 
   // ============================================
-  // DEMONSTRATION - Standard MoveIt 2 TCP Pattern (CONTINUES AS BEFORE)
+  // DEMONSTRATION - Standard MoveIt 2 TCP Pattern
   // ============================================
   
   RCLCPP_INFO(logger, "Step 13: Starting demo visualization...");
@@ -385,7 +386,7 @@ int main(int argc, char* argv[])
     prompt("Press 'next' to execute the motion");
     
     // ============================================
-    // STEP 4: Execute motion using plan()+execute() - better for trajectory visualization demos
+    // STEP 4: Execute motion using plan()+execute() \
     // ============================================
     
     RCLCPP_INFO(logger, "Step 30: Updating title for execution...");
@@ -393,13 +394,13 @@ int main(int argc, char* argv[])
     moveit_visual_tools.trigger();
     
     RCLCPP_INFO(logger, "Step 31: Executing planned motion...");
-    // Use execute(plan) since we already planned for visualization - more appropriate than move()
+    // Use execute(plan) 
     auto const execute_success = move_group_interface.execute(plan);
     
     RCLCPP_INFO(logger, "Step 32: Execution completed with result: %s", 
                 (execute_success == moveit::core::MoveItErrorCode::SUCCESS) ? "SUCCESS" : "FAILED");
     
-    // Fixed: Use correct MoveItErrorCode namespace for Humble
+    //  MoveItErrorCode 
     if (execute_success == moveit::core::MoveItErrorCode::SUCCESS) {
       RCLCPP_INFO(logger, "Motion executed successfully!");
       
